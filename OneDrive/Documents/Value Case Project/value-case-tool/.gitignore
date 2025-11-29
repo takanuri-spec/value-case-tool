@@ -1,0 +1,33 @@
+# Python
+backend/__pycache__/
+backend/*.db
+backend/*.db-journal
+backend/.env
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Node
+node_modules/
+dist/
+.env
+.env.local
+.env.production.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Gemini
+.gemini/
