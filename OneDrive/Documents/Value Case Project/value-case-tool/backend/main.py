@@ -6,8 +6,7 @@ import models
 import schemas
 import services
 
-# Create DB tables (temporarily drop to recreate with new schema)
-models.Base.metadata.drop_all(bind=engine)  # TEMPORARY: Remove after first successful deploy
+# Create DB tables
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
