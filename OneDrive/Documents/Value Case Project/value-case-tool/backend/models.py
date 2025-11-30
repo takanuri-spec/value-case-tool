@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, JSON
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, JSON
 from database import Base
 from datetime import datetime
 
@@ -14,7 +14,7 @@ class CompanyFinancialSnapshot(Base):
     fiscal_year_start_month = Column(Integer)
     
     # Market Data
-    market_cap = Column(Integer)  # BigInt in spec, Integer in Python/SQLite usually handles large nums
+    market_cap = Column(BigInteger)  # BigInteger to handle large market cap values
     roe = Column(Float)
     pbr = Column(Float)
     
