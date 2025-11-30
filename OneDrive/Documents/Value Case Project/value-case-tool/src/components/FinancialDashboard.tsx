@@ -251,7 +251,6 @@ const FinancialDashboard: React.FC<FinancialDashboardProps> = ({ company, select
                     fcffArray,
                     ebitdaArray,
                     evParams.wacc,
-                    evParams.taxRate,
                     evParams.shortTermGrowthRate,
                     evParams.longTermGrowthRate
                 );

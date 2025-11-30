@@ -15,8 +15,7 @@ export const initMockDeals = () => {
     };
 
     // Check if mock deal already exists
-    const mockDealId = `deal_${targetCompany.id}_mock`; // Assuming this ID format or we search by name
-    // Actually, saveDeal generates a random ID. Let's search by name for the sample deal.
+    // saveDeal generates a random ID, so we search by name for the sample deal.
     const mockDealName = '中期経営計画2025 (Sample)';
 
     const existingMockDealIndex = deals.findIndex(d => d.name === mockDealName && d.companyId === targetCompany.id);

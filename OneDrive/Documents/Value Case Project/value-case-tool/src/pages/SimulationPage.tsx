@@ -1,22 +1,27 @@
-import { useState, useEffect, useMemo } from 'react';
-import { Save } from 'lucide-react';
-import CompanySearch from '../components/CompanySearch';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Save, Upload, Download } from 'lucide-react';
 import SimulationInput from '../components/SimulationInput';
 import SimulationDashboard from '../components/SimulationDashboard';
 import { calculateStrategyKPIs, runSimulation } from '../utils/simulationEngine';
 import { saveDeal, loadDeals } from '../utils/storage';
+import { parseDealFile, downloadTemplate } from '../utils/fileImport';
 import { useCompany } from '../contexts/CompanyContext';
-import type { SimulationDeal, InvestmentStrategy } from '../types/simulation';
-import { fetchFinancialData, convertSnapshotToCompany } from '../utils/api';
+import type { InvestmentStrategy } from '../types/simulation';
 
 const SimulationPage = () => {
-    const { selectedCompany, setSelectedCompany, allCompanies } = useCompany();
+    const {
+        selectedCompany,
+        selectedDealId,
+        availableDeals,
+        refreshDeals,
+        selectDeal
+    } = useCompany();
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const [strategies, setStrategies] = useState<InvestmentStrategy[]>([]);
     const [selectedStrategyIds, setSelectedStrategyIds] = useState<string[]>([]);
     const [editingStrategyId, setEditingStrategyId] = useState<string | null>(null);
     const [dealName, setDealName] = useState<string>('');
-    const [availableDeals, setAvailableDeals] = useState<SimulationDeal[]>([]);
-    const [selectedDealId, setSelectedDealId] = useState<string>('');
 
     // EV Parameters state (with defaults)
     const [evParameters, setEVParameters] = useState({
@@ -26,80 +31,32 @@ const SimulationPage = () => {
         longTermGrowthRate: 2.0
     });
 
-    // Load all available deals on mount
-    useEffect(() => {
-        const deals = loadDeals();
-        setAvailableDeals(deals);
-    }, []);
-
-    // Reset strategies when company changes
+    // Sync strategies and params when selectedDealId changes
     useEffect(() => {
         if (!selectedDealId) {
             setStrategies([]);
             setSelectedStrategyIds([]);
             setDealName('');
-        }
-    }, [selectedCompany, selectedDealId]);
-
-    // Handle Deal Selection
-    const handleSelectDeal = async (dealId: string) => {
-        setSelectedDealId(dealId);
-        if (!dealId) {
-            setStrategies([]);
-            setSelectedStrategyIds([]);
-            setDealName('');
+            // Reset EV params to defaults
+            setEVParameters({
+                wacc: 8.0,
+                taxRate: 30.0,
+                shortTermGrowthRate: 3.0,
+                longTermGrowthRate: 2.0
+            });
             return;
         }
 
-        const deal = availableDeals.find(d => d.id === dealId);
+        const deal = availableDeals.find(d => d.id === selectedDealId);
         if (deal) {
-            try {
-                // Update the selected company when deal is selected
-                let company = allCompanies.find(c => c.id === deal.companyId);
-
-                // If company not found in allCompanies, try to fetch it
-                if (!company) {
-                    // Extract ticker from company ID (format: y_TICKER or just TICKER)
-                    const ticker = deal.companyId.startsWith('y_')
-                        ? deal.companyId.substring(2).replace(/_/g, '.')  // y_7203_T -> 7203.T
-                        : deal.companyId;
-
-                    try {
-                        const snapshot = await fetchFinancialData(ticker);
-                        const fullCompany = convertSnapshotToCompany(snapshot);
-                        setSelectedCompany(fullCompany);
-                    } catch (err) {
-                        console.error('Failed to fetch company by ticker:', ticker, err);
-                        alert(`企業データの読み込みに失敗しました (Ticker: ${ticker})`);
-                        return;
-                    }
-                } else {
-                    // Company found in allCompanies
-                    if (company.id.startsWith('y_')) {
-                        // Fetch full financial data for imported companies
-                        const snapshot = await fetchFinancialData(company.code);
-                        const fullCompany = convertSnapshotToCompany(snapshot);
-                        setSelectedCompany(fullCompany);
-                    } else {
-                        // Mock companies already have full data
-                        setSelectedCompany(company);
-                    }
-                }
-
-                setStrategies(deal.strategies);
-                setSelectedStrategyIds(deal.selectedStrategyIds || []); // Load saved selection state
-                setDealName(deal.name);
-
-                // Load EV parameters if available, otherwise use defaults
-                if (deal.evParameters) {
-                    setEVParameters(deal.evParameters);
-                }
-            } catch (error) {
-                console.error('Failed to load company data:', error);
-                alert('企業データの読み込みに失敗しました');
+            setStrategies(deal.strategies);
+            setSelectedStrategyIds(deal.selectedStrategyIds || []);
+            setDealName(deal.name);
+            if (deal.evParameters) {
+                setEVParameters(deal.evParameters);
             }
         }
-    };
+    }, [selectedDealId, availableDeals]);
 
     const handleAddStrategy = (strategy: InvestmentStrategy) => {
         setStrategies([...strategies, calculateStrategyKPIs(strategy)]);
@@ -134,26 +91,39 @@ const SimulationPage = () => {
         const finalName = dealName.trim() || generateDefaultDealName();
 
         // Save deal with current strategies AND selected state
-        const savedDeal = saveDeal(finalName, selectedCompany.id, strategies, selectedStrategyIds);
-
-        // Update with EV parameters
-        savedDeal.evParameters = evParameters;
-        const deals = loadDeals();
-        const dealIndex = deals.findIndex(d => d.id === savedDeal.id);
-        if (dealIndex !== -1) {
-            deals[dealIndex] = savedDeal;
-            localStorage.setItem('value_case_deals', JSON.stringify(deals));
-        }
+        const savedDeal = saveDeal(finalName, selectedCompany.id, strategies, selectedStrategyIds, evParameters);
 
         alert(`ディール「${finalName}」を保存しました！`);
 
-        // Refresh available deals list
-        const updatedDeals = loadDeals();
-        setAvailableDeals(updatedDeals);
+        // Refresh available deals list in context
+        refreshDeals();
 
-        // Select the saved deal
-        setSelectedDealId(savedDeal.id);
-        setDealName(savedDeal.name);
+        // Select the saved deal (this will trigger the effect to reload data, which is fine)
+        selectDeal(savedDeal.id);
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        try {
+            const importedStrategies = await parseDealFile(file);
+            if (importedStrategies.length === 0) {
+                alert('有効なデータが見つかりませんでした');
+                return;
+            }
+
+            if (window.confirm(`${importedStrategies.length}件の施策が見つかりました。現在の施策リストを上書きしますか？`)) {
+                setStrategies(importedStrategies);
+                setSelectedStrategyIds(importedStrategies.map(s => s.id));
+                alert('読み込みが完了しました');
+            }
+        } catch (error) {
+            console.error(error);
+            alert('ファイルの読み込みに失敗しました');
+        } finally {
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
     };
 
     const generateDefaultDealName = (): string => {
@@ -189,28 +159,33 @@ const SimulationPage = () => {
                     {/* Deal Controls */}
                     {selectedCompany && (
                         <div className="flex items-center gap-3">
-                            {/* Deal Selector - Always show if there are deals */}
-                            {availableDeals.length > 0 && (
-                                <select
-                                    value={selectedDealId}
-                                    onChange={(e) => handleSelectDeal(e.target.value)}
-                                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                                >
-                                    <option value="">新規作成 / ディール選択</option>
-                                    {availableDeals.map(deal => {
-                                        const company = allCompanies.find(c => c.id === deal.companyId);
-                                        return (
-                                            <option key={deal.id} value={deal.id}>
-                                                {deal.name} - {company?.name || '不明な企業'}
-                                            </option>
-                                        );
-                                    })}
-                                </select>
-                            )}
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handleFileUpload}
+                                className="hidden"
+                                accept=".xlsx,.xls,.csv"
+                            />
+                            <button
+                                onClick={() => downloadTemplate()}
+                                className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                                title="テンプレートをダウンロード"
+                            >
+                                <Download size={16} />
+                                テンプレート
+                            </button>
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+                                title="ファイルをアップロード"
+                            >
+                                <Upload size={16} />
+                                インポート
+                            </button>
 
-                            {/* Deal Name Input & Save */}
                             {(strategies.length > 0 || selectedDealId) && (
                                 <>
+                                    <div className="h-8 w-px bg-gray-300 mx-1"></div>
                                     <input
                                         type="text"
                                         value={dealName}
@@ -223,14 +198,13 @@ const SimulationPage = () => {
                                         className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap"
                                     >
                                         <Save size={18} />
-                                        ディールを保存
+                                        保存
                                     </button>
                                 </>
                             )}
                         </div>
                     )}
                 </div>
-                <CompanySearch />
 
                 {/* EV Parameters Section */}
                 {selectedCompany && (

@@ -1,8 +1,14 @@
-import type { SimulationDeal, InvestmentStrategy } from '../types/simulation';
+import type { SimulationDeal, InvestmentStrategy, EVParameters } from '../types/simulation';
 
 const STORAGE_KEY = 'value_case_deals';
 
-export const saveDeal = (name: string, companyId: string, strategies: InvestmentStrategy[], selectedStrategyIds: string[]): SimulationDeal => {
+export const saveDeal = (
+    name: string,
+    companyId: string,
+    strategies: InvestmentStrategy[],
+    selectedStrategyIds: string[],
+    evParameters?: EVParameters
+): SimulationDeal => {
     const deals = loadDeals();
 
     // Check if deal with same name exists for this company
@@ -14,6 +20,7 @@ export const saveDeal = (name: string, companyId: string, strategies: Investment
             ...deals[existingIndex],
             strategies,
             selectedStrategyIds,
+            evParameters, // Update params
             createdAt: new Date().toISOString() // Update timestamp
         };
         deals[existingIndex] = updatedDeal;
@@ -28,6 +35,7 @@ export const saveDeal = (name: string, companyId: string, strategies: Investment
         companyId,
         strategies,
         selectedStrategyIds,
+        evParameters, // Save params
         createdAt: new Date().toISOString(),
     };
 

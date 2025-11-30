@@ -137,7 +137,6 @@ export const calculateAllEVApproaches = (
     fcffArray: number[],
     ebitdaArray: number[],
     wacc: number,
-    taxRate: number,
     shortTermGrowthRate: number,
     longTermGrowthRate: number
 ): EVAnalysis => {
